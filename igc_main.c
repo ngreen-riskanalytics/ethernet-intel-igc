@@ -1669,7 +1669,7 @@ static bool igc_can_reuse_rx_page(struct igc_rx_buffer *rx_buffer)
 
 #if (PAGE_SIZE < 8192)
 	/* if we are only owner of page we can reuse it */
-	if (unlikely(atomic_read(&page->_count) - pagecnt_bias > 1))
+	if (unlikely(atomic_read(&page->_refcount) - pagecnt_bias > 1))
 		return false;
 #else
 #define IGC_LAST_OFFSET \
@@ -1684,7 +1684,7 @@ static bool igc_can_reuse_rx_page(struct igc_rx_buffer *rx_buffer)
 	 * number of references the driver holds.
 	 */
 	if (unlikely(!pagecnt_bias)) {
-		atomic_add(USHRT_MAX, &page->_count);
+		atomic_add(USHRT_MAX, &page->_refcount);
 		rx_buffer->pagecnt_bias = USHRT_MAX;
 	}
 
@@ -3779,7 +3779,7 @@ void igc_down(struct igc_adapter *adapter)
 	/* flush and sleep below */
 
 	/* set trans_start so we don't get spurious watchdogs during reset */
-	netdev->trans_start = jiffies;
+	netif_trans_update(netdev);
 
 	netif_carrier_off(netdev);
 	netif_tx_stop_all_queues(netdev);
@@ -4119,6 +4119,9 @@ static void igc_clear_interrupt_scheme(struct igc_adapter *adapter)
 	igc_free_q_vectors(adapter);
 	igc_reset_interrupt_capability(adapter);
 }
+
+#define from_timer(var, callback_timer, timer_fieldname) \
+	container_of(callback_timer, typeof(*var), timer_fieldname)
 
 /* Need to wait a few seconds after link up to get diagnostic information from
  * the phy
@@ -4668,40 +4671,6 @@ static int igc_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 	}
 }
 
-static int igc_save_launchtime_params(struct igc_adapter *adapter, int queue,
-				      bool enable)
-{
-	struct igc_ring *ring;
-	int i;
-
-	if (queue < 0 || queue >= adapter->num_tx_queues)
-		return -EINVAL;
-
-	ring = adapter->tx_ring[queue];
-	ring->launchtime_enable = enable;
-
-	if (adapter->base_time.tv64)
-		return 0;
-
-	adapter->cycle_time.tv64 = NSEC_PER_SEC;
-
-	for (i = 0; i < adapter->num_tx_queues; i++) {
-		ring = adapter->tx_ring[i];
-		ring->start_time = 0;
-		ring->end_time = NSEC_PER_SEC;
-	}
-
-	return 0;
-}
-
-static bool is_base_time_past(ktime_t base_time, const struct timespec64 *now)
-{
-	struct timespec64 b;
-
-	b = ktime_to_timespec64(base_time);
-
-	return timespec64_compare(now, &b) > 0;
-}
 
 // static bool validate_schedule(struct igc_adapter *adapter,
 // 			      const struct tc_taprio_qopt_offload *qopt)
@@ -4970,6 +4939,18 @@ err_inval:
 	return -EINVAL;
 }
 
+
+static void igc_watchdog_update(unsigned long data) {
+  struct igc_adapter *adapter = (struct igc_adapter *)data;
+  schedule_work(&adapter->watchdog_task);
+}
+
+static void igc_phy_info_update(unsigned long data) {
+  struct igc_adapter *adapter = (struct igc_adapter *)data;
+  igc_get_phy_info(&adapter->hw);
+}
+
+
 /**
  * igc_probe - Device Initialization Routine
  * @pdev: PCI device information struct
@@ -5124,8 +5105,13 @@ static int igc_probe(struct pci_dev *pdev,
 	wr32(IGC_RXPBS, I225_RXPBSIZE_DEFAULT);
 	wr32(IGC_TXPBS, I225_TXPBSIZE_DEFAULT);
 
-	timer_setup(&adapter->watchdog_timer, igc_watchdog, 0);
-	timer_setup(&adapter->phy_info_timer, igc_update_phy_info, 0);
+	init_timer(&adapter->watchdog_timer);
+	adapter->watchdog_timer.function = igc_watchdog_update;
+	adapter->watchdog_timer.data = (unsigned long)adapter;
+
+	init_timer(&adapter->phy_info_timer);
+	adapter->phy_info_timer.function = igc_phy_info_update;
+	adapter->phy_info_timer.data = (unsigned long)adapter;
 
 	INIT_WORK(&adapter->reset_task, igc_reset_task);
 	INIT_WORK(&adapter->watchdog_task, igc_watchdog_task);
