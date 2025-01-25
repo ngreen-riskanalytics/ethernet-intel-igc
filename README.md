@@ -1,3 +1,17 @@
+# Intel igc driver for Jetson Nano Kernel 4.9.337-tegra
+
+Updated from original Synology backport (see info below)
+
+# Instructions
+
+1. I'm using youyeetoo M.2 A E Key to 2.5 Gigabit Ethernet Intel I225: https://www.amazon.com/gp/aw/d/B0DDPMK2VK
+2. Install this in the M.2 E key slot on the jetson nano
+3. clone this repo, then compile:
+4. `make -C /lib/modules/`uname -r`/build M=$PWD`
+5. `sudo insmod igc.ko debug=16`
+
+---
+
 # Intel igc driver for Synology Kernel 4.4.180
 
 > Backport from Linux Kernel v5.12, commit: https://github.com/torvalds/linux/commit/9f4ad9e425a1d3b6a34617b8ea226d56a119a717
