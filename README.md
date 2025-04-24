@@ -119,6 +119,14 @@ ip link set up eth1 # in my machine, the nic name is eth1
 
 ## History
 
+### 1.5.0
+
+* Support kernel 4.19
+
+### 1.4.0
+
+* Support kernel 4.9
+
 ### 1.3.1
 
 _Date 2022.11.26_

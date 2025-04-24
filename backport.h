@@ -38,16 +38,6 @@ static inline bool dev_page_is_reusable(struct page *page)
                       !page_is_pfmemalloc(page));
 }
 
-/**
- * refcount_read - get a refcount's value
- * @r: the refcount
- *
- * Return: the refcount's value
- */
-static inline unsigned int refcount_read(atomic_t *r)
-{
-        return atomic_read(r);
-}
 
 // static inline __must_check bool __refcount_sub_and_test(int i, atomic_t *r, int *oldp)
 // {
@@ -208,16 +198,3 @@ static inline int page_ref_sub_and_test(struct page *page, int nr)
 	int ret = atomic_sub_and_test(nr, &page->_count);
 	return ret;
 }*/
-
-static inline void __page_frag_cache_drain(struct page *page, unsigned int count)
-{
-	if (page_ref_sub_and_test(page, count)) {
-		unsigned int order = compound_order(page);
-
-                // TODO optimize with free_unref_page
-		// if (order == 0)
-		// 	free_unref_page(page);
-		// else
-			__free_pages(page, order);
-	}
-}

@@ -914,7 +914,7 @@ static __le32 igc_tx_launchtime(struct igc_adapter *adapter, ktime_t txtime)
 	 * IGC_BASET, as the value writen into the launchtime
 	 * descriptor field may be misinterpreted.
 	 */
-	div_s64_rem(sub_time.tv64, cycle_time.tv64, &launchtime);
+	div_s64_rem(sub_time, cycle_time, &launchtime);
 
 	return cpu_to_le32(launchtime);
 }
@@ -3900,7 +3900,7 @@ static int igc_change_mtu(struct net_device *netdev, int new_mtu)
  * Returns the address of the device statistics structure.
  * The statistics are updated here and also from the timer callback.
  */
-static struct rtnl_link_stats64 *igc_get_stats64(struct net_device *netdev,
+static void igc_get_stats64(struct net_device *netdev,
 			    struct rtnl_link_stats64 *stats)
 {
 	struct igc_adapter *adapter = netdev_priv(netdev);
@@ -3910,7 +3910,6 @@ static struct rtnl_link_stats64 *igc_get_stats64(struct net_device *netdev,
 		igc_update_stats(adapter);
 	memcpy(stats, &adapter->stats64, sizeof(*stats));
 	spin_unlock(&adapter->stats64_lock);
-	return stats;
 }
 
 static netdev_features_t igc_fix_features(struct net_device *netdev,
@@ -5105,13 +5104,8 @@ static int igc_probe(struct pci_dev *pdev,
 	wr32(IGC_RXPBS, I225_RXPBSIZE_DEFAULT);
 	wr32(IGC_TXPBS, I225_TXPBSIZE_DEFAULT);
 
-	init_timer(&adapter->watchdog_timer);
-	adapter->watchdog_timer.function = igc_watchdog_update;
-	adapter->watchdog_timer.data = (unsigned long)adapter;
-
-	init_timer(&adapter->phy_info_timer);
-	adapter->phy_info_timer.function = igc_phy_info_update;
-	adapter->phy_info_timer.data = (unsigned long)adapter;
+	timer_setup(&adapter->watchdog_timer, igc_watchdog, 0);
+	timer_setup(&adapter->phy_info_timer, igc_update_phy_info, 0);
 
 	INIT_WORK(&adapter->reset_task, igc_reset_task);
 	INIT_WORK(&adapter->watchdog_task, igc_watchdog_task);
